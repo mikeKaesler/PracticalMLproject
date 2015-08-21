@@ -1,0 +1,87 @@
+---
+title: "ML Course Project"
+author: "Michael Kaesler"
+date: "Thursday, August 20, 2015"
+output: html_document
+---
+```{r, echo=FALSE}
+library(bitops)
+library(RCurl)
+library(dplyr)
+library(caret)
+library(doParallel)
+registerDoParallel(cores=2)
+
+urlTrain <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+urlTest <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+download.file(urlTrain, destfile = "Train.csv", method = "libcurl")
+download.file(urlTest, destfile = "Test.csv", method = "libcurl")
+
+dataTrain <- read.csv("Train.csv")
+dataTest <- read.csv("Test.csv")
+dataTrainDrop <- dataTrain[, c(colnames(dataTrain)[grep("^min_", colnames(dataTrain))],
+                            colnames(dataTrain)[grep("^max_", colnames(dataTrain))],
+                            colnames(dataTrain)[grep("^var_", colnames(dataTrain))],
+                            colnames(dataTrain)[grep("^avg_", colnames(dataTrain))],
+                            colnames(dataTrain)[grep("^amplitude_", colnames(dataTrain))],
+                            colnames(dataTrain)[grep("^skewness_", colnames(dataTrain))],
+                            colnames(dataTrain)[grep("^kurtosis_", colnames(dataTrain))],
+                            colnames(dataTrain)[grep("^stddev_", colnames(dataTrain))],
+                            "X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2",
+                            "cvtd_timestamp", "new_window", "num_window")]
+
+u <- names(dataTrainDrop)
+dataTrainReal <- dataTrain[, -which(names(dataTrain) %in% u)]
+```
+
+
+### Executive Summary
+
+The purpose of this study was to take data from mobile fitness devices, such as Fitbit, Nike FuelBand etc., and given a wide varitey of variables predict what sort of athletic activity the subject was preforming at that time. To achieve this, the random forest machine learning algorithim was used because a classifying algorithim was requried and accuracy was a concern. A simple training/test set split was used for cross validation, with the method predicting with 99.2% accuracy. 
+
+### Methodology
+
+First, the dataset was examined manually. Immediately it was discovered that there were numerous NA and ommited values all over both the given training and test sets. Since caret's tools don't work well unless there is a complete dataset, this had to be dealt with. 
+
+Upon further examination, it was discovered that a majority of the columns, in fact all of the columns, with contained NA's or had their values omitted, consisted of vairables that were not direct sensor measurements. Rather, they were functions of the measurements, such as minimun, maximum, the average, etc. 
+
+Since these were essentially just linear combinations, or in other cases functions of previous columns, it was decided that they were not infact adding new information to the dataset, so all of these columns were to be eliminated. The only columns that remained would be ones of direct sensor measurement. Along the same vein, caretaker variables in the beginning were removed as well, since they did not contain any predicitive value and some would correlate too directly with the outcome. Thus, the final dataset to examine was found as such: 
+
+``` {r, eval=FALSE}
+dataTrainDrop <- dataTrain[, c(colnames(dataTrain)[grep("^min_", colnames(dataTrain))],
+                        colnames(dataTrain)[grep("^max_", colnames(dataTrain))],
+                        colnames(dataTrain)[grep("^var_", colnames(dataTrain))],
+                        colnames(dataTrain)[grep("^avg_", colnames(dataTrain))],
+                        colnames(dataTrain)[grep("^amplitude_", colnames(dataTrain))],
+                        colnames(dataTrain)[grep("^skewness_", colnames(dataTrain))],
+                        colnames(dataTrain)[grep("^kurtosis_", colnames(dataTrain))],
+                        colnames(dataTrain)[grep("^stddev_", colnames(dataTrain))],
+                    "X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2",
+                            "cvtd_timestamp", "new_window", "num_window")]
+
+u <- names(dataTrainDrop)
+dataTrainReal <- dataTrain[, -which(names(dataTrain) %in% u)]
+```
+
+Now, only lift specific measurements were left. In order to get an accurate out of sample accuracy measurement, cross validation was required and this new data set had to be split into training and test data. This was done like so:
+``` {r}
+inTrain <- createDataPartition(dataTrainReal$classe, p = 0.7, list = FALSE)
+training <- dataTrainReal[inTrain,]
+testing <- dataTrainReal[-inTrain,]
+```
+
+Once the training and testing datasets were made, split off the classe variable in which we are attempting to predict with the training set containing 70 percent of the observations, it was time to fit the model. A random forest model was chosen because a classification model was needed, and due to other project restrictions, accuracy was a necessity. The following random forest model was used:
+```{r}
+modelFit <- train(classe ~ ., data = training, method = "rf", proxy = T)
+```
+
+After obtaining our initial model, testing was required. We used our newley created testing set to perform a cross validation check. We then placed the results into a table to see how accurate the prediction algorithm was. We obtained:
+``` {r}
+pred <- predict(modelFit, testing)
+table(pred, testing$classe)
+```
+
+Counting, we can see that 5838 out of 5885 cases were predicted correctly. This gives us a 99.2% accuracy on our predictions. 
+
+As such, we believe that our model gives a highly accurate representation of the predictors in this scenario, and as such it could be trusted to do reasonably the same for a different group of predictors in this same situation.
